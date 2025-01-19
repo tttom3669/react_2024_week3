@@ -1,10 +1,28 @@
 import axios from 'axios';
+import PropTypes, { string } from 'prop-types';
+
 import 'bootstrap/dist/css/bootstrap.min.css'; // 引入 CSS
-import { useEffect, useState } from 'react';
-// import { Modal } from 'bootstrap';
+import { useEffect, useState, useRef } from 'react';
+import { Modal } from 'bootstrap';
 
 const { VITE_BASE_URL: API_URL, VITE_APP_PATH: API_PATH } = import.meta.env;
 
+const defaultModalState = {
+  imageUrl: '',
+  title: '',
+  category: '',
+  unit: '',
+  origin_price: '',
+  price: '',
+  description: '',
+  content: '',
+  is_enabled: 0,
+  imagesUrl: [''],
+};
+
+/**
+ * 登入面板
+ */
 const LoginPanel = ({ isAuth, setIsAuth }) => {
   const [account, setAccount] = useState({});
   const accountHandler = (e) => {
@@ -22,7 +40,6 @@ const LoginPanel = ({ isAuth, setIsAuth }) => {
       const { token, expired } = res.data;
       document.cookie = `hexToken=${token}; expires=${new Date(expired)}`;
       axios.defaults.headers.common['Authorization'] = token;
-
       setIsAuth(true);
       alert('登入成功');
     } catch (error) {
@@ -70,21 +87,28 @@ const LoginPanel = ({ isAuth, setIsAuth }) => {
     </>
   );
 };
+LoginPanel.propTypes = {
+  isAuth: PropTypes.bool,
+  setIsAuth: PropTypes.func,
+};
 
+/**
+ * 產品面板
+ */
 const ProductsPanel = ({ isAuth, setIsAuth }) => {
-  const [tempProduct, setTempProduct] = useState({});
+  const [tempProduct, setTempProduct] = useState(defaultModalState);
   const [products, setProducts] = useState([]);
+  const [modalStatus, setModalStatus] = useState('create');
+  const modalRef = useRef(null);
+  const deleteRef = useRef(null);
+
   const getProducts = async () => {
     try {
-      const cookie = document.cookie.replace(
-        /(?:(?:^|.*;\s*)hexToken\s*\=\s*([^;]*).*$)|^.*$/,
-        '$1'
-      );
-      axios.defaults.headers.common['Authorization'] = cookie;
       const res = await axios.get(
         `${API_URL}/v2/api/${API_PATH}/admin/products`
       );
       const { products: productsResult } = res.data;
+
       setProducts([...productsResult]);
     } catch (error) {
       setIsAuth(false);
@@ -93,30 +117,58 @@ const ProductsPanel = ({ isAuth, setIsAuth }) => {
   };
   const checkUser = async () => {
     try {
-      const res = await axios.post(`${API_URL}/v2/api/user/check`);
-      console.log(res);
-      alert('使用者已登入成功');
+      const cookie = document.cookie.replace(
+        /(?:(?:^|.*;\s*)hexToken\s*\=\s*([^;]*).*$)|^.*$/,
+        '$1'
+      );
+      axios.defaults.headers.common['Authorization'] = cookie;
+      await axios.post(`${API_URL}/v2/api/user/check`);
     } catch (error) {
       console.log(error);
     }
   };
+  const openModal = (product) => {
+    const modalInstance = Modal.getInstance(modalRef.current);
+    if (!product) {
+      setModalStatus('create');
+      setTempProduct(defaultModalState);
+    } else {
+      setModalStatus('update');
+      setTempProduct(product);
+    }
+    modalInstance.show();
+  };
+  const openDelModal = (product) => {
+    setTempProduct(product);
+    const modalInstance = Modal.getInstance(deleteRef.current);
+    modalInstance.show();
+  };
 
   useEffect(() => {
+    if (!isAuth) {
+      return;
+    }
+    checkUser();
     getProducts();
-  }, []);
+    new Modal(modalRef.current);
+    new Modal(deleteRef.current);
+  }, [isAuth]);
 
   return (
     <div className={`container py-5 ${!isAuth ? 'd-none' : 'd-block'}`}>
-      <button
-        type="button"
-        className="btn btn-success mb-4"
-        onClick={checkUser}
-      >
-        檢查使用者是否登入
-      </button>
       <div className="row">
-        <div className="col-6">
-          <h2>產品列表</h2>
+        <div className="col-12">
+          <div className="d-flex align-items-center justify-content-between">
+            <h2>產品列表</h2>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => openModal()}
+            >
+              建立新的產品
+            </button>
+          </div>
+
           <table className="table">
             <thead>
               <tr>
@@ -133,78 +185,150 @@ const ProductsPanel = ({ isAuth, setIsAuth }) => {
                   <th scope="row">{product.title}</th>
                   <td>{product.origin_price}</td>
                   <td>{product.price}</td>
-                  <td>{product.is_enabled}</td>
+                  <td>{product.is_enabled ? '啟用' : '未啟用'}</td>
                   <td>
-                    <button
-                      onClick={() => setTempProduct(product)}
-                      className="btn btn-primary"
-                      type="button"
-                    >
-                      查看細節
-                    </button>
+                    <div className="btn-group">
+                      <button
+                        type="button"
+                        onClick={() => openModal(product)}
+                        className="btn btn-outline-primary btn-sm"
+                      >
+                        編輯
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline-danger btn-sm"
+                        onClick={() => openDelModal(product)}
+                      >
+                        刪除
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="col-6">
-          <h2>單一產品細節</h2>
-          {tempProduct.title ? (
-            <div className="card">
-              <img
-                src={tempProduct.imageUrl}
-                className="card-img-top img-fluid"
-                alt={tempProduct.title}
-              />
-              <div className="card-body">
-                <h5 className="card-title">
-                  {tempProduct.title}
-                  <span className="badge text-bg-primary">
-                    {tempProduct.category}
-                  </span>
-                </h5>
-                <p className="card-text">商品描述：{tempProduct.description}</p>
-                <p className="card-text">商品內容：{tempProduct.content}</p>
-                <p className="card-text">
-                  <del>{tempProduct.origin_price} 元</del> / {tempProduct.price}{' '}
-                  元
-                </p>
-                <h5 className="card-title">更多圖片：</h5>
-                {tempProduct.imagesUrl?.map(
-                  (image) =>
-                    image && (
-                      <img key={image} src={image} className="img-fluid" />
-                    )
-                )}
-              </div>
-            </div>
-          ) : (
-            <p>請選擇一個商品查看</p>
-          )}
+        <div className="col-12">
+          <nav aria-label="Page navigation example">
+            <ul className="pagination">
+              <li className="page-item">
+                <a className="page-link" href="#" aria-label="Previous">
+                  <span aria-hidden="true">&laquo;</span>
+                </a>
+              </li>
+              {console.log([...new Array(paginationData.total_pages)])}
+              <li className="page-item">
+                <a className="page-link" href="#">
+                  1
+                </a>
+              </li>
+              <li className="page-item">
+                <a className="page-link" href="#" aria-label="Next">
+                  <span aria-hidden="true">&raquo;</span>
+                </a>
+              </li>
+            </ul>
+          </nav>
         </div>
       </div>
-      <Modal tempProduct={tempProduct} />
+      <ProductModal
+        tempProduct={tempProduct}
+        setTempProduct={setTempProduct}
+        modalRef={modalRef}
+        modalStatus={modalStatus}
+        getProducts={getProducts}
+      />
+      <DeleteModal
+        tempProduct={tempProduct}
+        deleteRef={deleteRef}
+        getProducts={getProducts}
+      />
     </div>
   );
 };
 
-const Modal = ({ tempProduct }) => {
+ProductsPanel.propTypes = {
+  isAuth: PropTypes.bool,
+  setIsAuth: PropTypes.func,
+};
+
+/**
+ *  產品 Modal
+ */
+const ProductModal = ({
+  tempProduct,
+  modalRef,
+  setTempProduct,
+  modalStatus,
+  getProducts,
+}) => {
+  const closeModal = () => {
+    const modalInstance = Modal.getInstance(modalRef.current);
+    modalInstance.hide();
+  };
+  const handleTempProductData = (e) => {
+    const name = e.target.name;
+    const value =
+      e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    setTempProduct({
+      ...tempProduct,
+      [name]: value,
+    });
+  };
+  const handleImagesChange = (e, index) => {
+    const newImages = [...tempProduct.imagesUrl];
+    newImages[index] = e.target.value;
+    setTempProduct({
+      ...tempProduct,
+      imagesUrl: newImages,
+    });
+  };
+  const handlerProductData = async () => {
+    const apiMethod = modalStatus === 'create' ? 'POST' : 'PUT';
+    const apiUrl =
+      modalStatus === 'create'
+        ? `${API_URL}/v2/api/${API_PATH}/admin/product`
+        : `${API_URL}/v2/api/${API_PATH}/admin/product/${tempProduct.id}`;
+    try {
+      await axios({
+        url: apiUrl,
+        method: apiMethod,
+        data: {
+          data: {
+            ...tempProduct,
+            price: Number(tempProduct.price),
+            origin_price: Number(tempProduct.origin_price),
+            is_enabled: tempProduct.is_enabled ? 1 : 0,
+          },
+        },
+      });
+      closeModal();
+      getProducts();
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
   return (
     <>
       <div
         id="productModal"
         className="modal"
         style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+        ref={modalRef}
       >
         <div className="modal-dialog modal-dialog-centered modal-xl">
           <div className="modal-content border-0 shadow">
             <div className="modal-header border-bottom">
-              <h5 className="modal-title fs-4">新增產品</h5>
+              <h5 className="modal-title fs-4">
+                {modalStatus === 'create' ? '新增' : '編輯'}產品
+              </h5>
               <button
                 type="button"
                 className="btn-close"
                 aria-label="Close"
+                onClick={closeModal}
               ></button>
             </div>
 
@@ -222,9 +346,15 @@ const Modal = ({ tempProduct }) => {
                         id="primary-image"
                         className="form-control"
                         placeholder="請輸入圖片連結"
+                        value={tempProduct.imageUrl}
+                        onChange={handleTempProductData}
                       />
                     </div>
-                    <img src="" alt="" className="img-fluid" />
+                    <img
+                      src={tempProduct.imageUrl}
+                      alt=""
+                      className="img-fluid"
+                    />
                   </div>
 
                   {/* 副圖 */}
@@ -242,6 +372,8 @@ const Modal = ({ tempProduct }) => {
                           type="text"
                           placeholder={`圖片網址 ${index + 1}`}
                           className="form-control mb-2"
+                          value={image}
+                          onChange={(e) => handleImagesChange(e, index)}
                         />
                         {image && (
                           <img
@@ -252,6 +384,49 @@ const Modal = ({ tempProduct }) => {
                         )}
                       </div>
                     ))}
+                    <div className="btn-group w-100">
+                      {tempProduct.imagesUrl.length < 5 &&
+                      tempProduct.imagesUrl[
+                        tempProduct.imagesUrl.length - 1
+                      ] !== '' ? (
+                        <>
+                          <button
+                            className="btn btn-outline-primary btn-sm w-100"
+                            onClick={() => {
+                              const newImages = [...tempProduct.imagesUrl];
+                              newImages.push('');
+                              setTempProduct({
+                                ...tempProduct,
+                                imagesUrl: newImages,
+                              });
+                            }}
+                          >
+                            新增圖片
+                          </button>
+                        </>
+                      ) : (
+                        ''
+                      )}
+                      {tempProduct.imagesUrl.length > 1 ? (
+                        <>
+                          <button
+                            className="btn btn-outline-danger btn-sm w-100"
+                            onClick={() => {
+                              const newImages = [...tempProduct.imagesUrl];
+                              newImages.pop();
+                              setTempProduct({
+                                ...tempProduct,
+                                imagesUrl: newImages,
+                              });
+                            }}
+                          >
+                            取消圖片
+                          </button>
+                        </>
+                      ) : (
+                        ''
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -266,6 +441,8 @@ const Modal = ({ tempProduct }) => {
                       type="text"
                       className="form-control"
                       placeholder="請輸入標題"
+                      value={tempProduct.title}
+                      onChange={handleTempProductData}
                     />
                   </div>
 
@@ -279,6 +456,8 @@ const Modal = ({ tempProduct }) => {
                       type="text"
                       className="form-control"
                       placeholder="請輸入分類"
+                      value={tempProduct.category}
+                      onChange={handleTempProductData}
                     />
                   </div>
 
@@ -292,6 +471,8 @@ const Modal = ({ tempProduct }) => {
                       type="text"
                       className="form-control"
                       placeholder="請輸入單位"
+                      value={tempProduct.unit}
+                      onChange={handleTempProductData}
                     />
                   </div>
 
@@ -306,6 +487,8 @@ const Modal = ({ tempProduct }) => {
                         type="number"
                         className="form-control"
                         placeholder="請輸入原價"
+                        value={tempProduct.origin_price}
+                        onChange={handleTempProductData}
                       />
                     </div>
                     <div className="col-6">
@@ -318,6 +501,8 @@ const Modal = ({ tempProduct }) => {
                         type="number"
                         className="form-control"
                         placeholder="請輸入售價"
+                        value={tempProduct.price}
+                        onChange={handleTempProductData}
                       />
                     </div>
                   </div>
@@ -332,6 +517,8 @@ const Modal = ({ tempProduct }) => {
                       className="form-control"
                       rows={4}
                       placeholder="請輸入產品描述"
+                      value={tempProduct.description}
+                      onChange={handleTempProductData}
                     ></textarea>
                   </div>
 
@@ -345,6 +532,8 @@ const Modal = ({ tempProduct }) => {
                       className="form-control"
                       rows={4}
                       placeholder="請輸入說明內容"
+                      value={tempProduct.content}
+                      onChange={handleTempProductData}
                     ></textarea>
                   </div>
 
@@ -354,6 +543,8 @@ const Modal = ({ tempProduct }) => {
                       type="checkbox"
                       className="form-check-input"
                       id="isEnabled"
+                      checked={tempProduct.is_enabled}
+                      onChange={handleTempProductData}
                     />
                     <label className="form-check-label" htmlFor="isEnabled">
                       是否啟用
@@ -364,10 +555,18 @@ const Modal = ({ tempProduct }) => {
             </div>
 
             <div className="modal-footer border-top bg-light">
-              <button type="button" className="btn btn-secondary">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={closeModal}
+              >
                 取消
               </button>
-              <button type="button" className="btn btn-primary">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handlerProductData}
+              >
                 確認
               </button>
             </div>
@@ -376,6 +575,83 @@ const Modal = ({ tempProduct }) => {
       </div>
     </>
   );
+};
+
+ProductModal.propTypes = {
+  tempProduct: PropTypes.object,
+  modalRef: PropTypes.object,
+  setTempProduct: PropTypes.func,
+  modalStatus: PropTypes.string,
+  getProducts: PropTypes.func,
+};
+/**
+ *  刪除 Modal
+ */
+const DeleteModal = ({ deleteRef, tempProduct, getProducts }) => {
+  const closeDelModal = () => {
+    const modalInstance = Modal.getInstance(deleteRef.current);
+    modalInstance.hide();
+  };
+  const deleteProduct = async () => {
+    try {
+      await axios.delete(
+        `${API_URL}/v2/api/${API_PATH}/admin/product/${tempProduct.id}`
+      );
+      closeDelModal();
+      getProducts();
+    } catch (error) {
+      console.log(error);
+    }
+  };
+  return (
+    <div
+      ref={deleteRef}
+      className="modal fade"
+      id="delProductModal"
+      tabIndex="-1"
+      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+    >
+      <div className="modal-dialog">
+        <div className="modal-content">
+          <div className="modal-header">
+            <h1 className="modal-title fs-5">刪除產品</h1>
+            <button
+              type="button"
+              className="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div className="modal-body">
+            你是否要刪除
+            <span className="text-danger fw-bold">{tempProduct.title}</span>
+          </div>
+          <div className="modal-footer">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={closeDelModal}
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={deleteProduct}
+            >
+              刪除
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+DeleteModal.propTypes = {
+  deleteRef: PropTypes.object,
+  tempProduct: PropTypes.object,
+  getProducts: PropTypes.func,
 };
 
 function App() {
