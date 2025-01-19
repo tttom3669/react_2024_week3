@@ -209,7 +209,7 @@ const ProductsPanel = ({ isAuth, setIsAuth }) => {
             </tbody>
           </table>
         </div>
-        <div className="col-12">
+        <div className="col-12 d-none">
           <nav aria-label="Page navigation example">
             <ul className="pagination">
               <li className="page-item">
@@ -217,7 +217,7 @@ const ProductsPanel = ({ isAuth, setIsAuth }) => {
                   <span aria-hidden="true">&laquo;</span>
                 </a>
               </li>
-              {console.log([...new Array(paginationData.total_pages)])}
+
               <li className="page-item">
                 <a className="page-link" href="#">
                   1
